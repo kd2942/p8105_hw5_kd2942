@@ -1,0 +1,77 @@
+---
+title: "p8105 Hw#5"
+author: "Kaylin De Silva"
+date: 11-15-2024
+output: github_document
+---
+**Problem 2**
+#loading libraries and fixing output
+```{r}
+library(tidyverse)
+library(dplyr)
+library(rvest)
+set.seed(1)
+```
+This chunk loads the tidyverse and dplyr libraries. 
+
+```{r}
+datasets = function(n = 30, mu = 0, sigma = 5) {
+  
+  sim_data = tibble(
+    x = rnorm(n, mean = mu, sd = sigma),
+  )
+  
+  sim_data |> 
+    summarize(
+      mu_hat = mean(x),
+      sigma_hat = sd(x)
+    )
+}
+
+output = data.frame(mu=numeric(), mu_hat=numeric(),p_value=numeric())
+
+for (mu in 1:6) {
+  for (i in 1:5000) {
+    sim=
+    datasets(n=30, mu = mu, sigma = 5)
+    t_test_result = t.test(sim, mean = mu)
+    t_test = broom::tidy(t_test_result)
+    output= bind_rows(output,
+                      data.frame(
+                        mu=mu,
+                        mu_hat = t_test$estimate,
+                        p_value = t_test$p.value
+                      ))
+    
+  }
+}
+```
+
+
+```{r}
+output = output|>
+  mutate(
+    conclusion = ifelse(
+      p_value <0.05, "Reject", "Fail to Reject")) |>
+      group_by(mu) |>
+        mutate(
+    power = 
+      mean(conclusion == "Reject"))
+    
+  
+output |> 
+  ggplot(aes(y=power, x= mu)) +
+  geom_point() +
+  geom_path()
+```
+
+**Describe the association between effect size and power**
+
+```{r}
+output |>
+  ggplot(aes(y=mu_hat, x=mu)) + 
+  geom_path()
+
+
+```
+
