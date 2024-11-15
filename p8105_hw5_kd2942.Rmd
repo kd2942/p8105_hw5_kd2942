@@ -20,31 +20,26 @@ datasets = function(n = 30, mu = 0, sigma = 5) {
   sim_data = tibble(
     x = rnorm(n, mean = mu, sd = sigma),
   )
-  
-  sim_data |> 
-    summarize(
-      mu_hat = mean(x),
-      sigma_hat = sd(x)
-    )
+  return(sim_data)
 }
 
 output = data.frame(mu=numeric(), mu_hat=numeric(),p_value=numeric())
 
-for (mu in 1:6) {
+for (mu in 0:6) {
   for (i in 1:5000) {
-    sim=
+    sim_data=
     datasets(n=30, mu = mu, sigma = 5)
-    t_test_result = t.test(sim, mean = mu)
+    t_test_result = t.test(sim_data$x, mu=0)
     t_test = broom::tidy(t_test_result)
     output= bind_rows(output,
                       data.frame(
                         mu=mu,
                         mu_hat = t_test$estimate,
-                        p_value = t_test$p.value
-                      ))
-    
-  }
+                        p_value = t_test$p.value))
+    }
 }
+
+head(output)
 ```
 
 
@@ -58,11 +53,15 @@ output = output|>
     power = 
       mean(conclusion == "Reject"))
     
-  
-power_plot = output |> 
-  ggplot(aes(y=power, x= mu)) +
+output|> 
+  ggplot(aes(y=power, x=mu)) +
   geom_point() +
-  geom_path()
+  geom_line() +
+  labs(
+    title = "Power of the t-test for Different Values of μ",
+    x = "True Value of μ",
+    y = "Power (Proportion of Null Rejected)"
+  )
 ```
 
 **Describe the association between effect size and power**
@@ -70,15 +69,106 @@ power_plot = output |>
 ```{r}
 output_gg =output |>
   mutate(
-    avg_mu_hat = mean(mu_hat))
+    avg_mu_hat = mean(mu_hat)) 
 
-output_gg|>
+output_gg_reject = output |> 
+  filter(conclusion=="Reject") |>
+   mutate(
+     avg_mu_hat = mean(mu_hat))
+
+output_gg_plot = output_gg|>
   ggplot(aes(y=avg_mu_hat, x=mu)) + 
   geom_point() + 
-  geom_path()
+  labs(
+    title = "Average Sample Mean Against True Mean",
+    x = "True Value of μ",
+    y = "Average Estimate of Sample Mean")
+
+output_gg_total  =
+  output_gg_plot +
+  geom_point(data = output_gg_reject, aes(y=avg_mu_hat, x=mu)) +
+  geom_line(data = output_gg, aes(y=avg_mu_hat, x=mu, color = "All samples")) +
+  geom_line(data = output_gg_reject, aes(y=avg_mu_hat, x=mu, color = "Samples where null was rejected")) +
+  scale_color_manual(values = c("All samples" = "blue", "Samples where null was rejected" = "red"), name = "Lines") +
+  theme(legend.position = "bottom", 
+        legend.title = element_text(face = "bold"), 
+        legend.text = element_text(size = 12))
+
+print(output_gg_total)
+```
+
+**Not equal where null was less likely to be rejected**
+
+**Problem 3**
+```{r}
+raw_washington_df = read.csv(file = "./homicide-data.csv")
+
+head(raw_washington_df)
+```
+The data set has 52,179 observations and 12 columns. 
+
+```{r}
+washington_df = raw_washington_df |>
+  mutate(
+    city_state = paste(city, state, sep=", ")
+  )
+
+summary = washington_df |>
+  group_by(city_state)|>
+  mutate(
+    unsolved = ifelse(disposition != "Closed by arrest", "TRUE", "FALSE")) |>
+  summarize(
+    total_homicide = n(),
+    total_unsolved= sum(unsolved == "TRUE"))
+    
+print(summary)  
 ```
 
 ```{r}
+baltimore_df = summary |>
+  filter(city_state == "Baltimore, MD") 
 
+output_df = data.frame(proportion=numeric(), confidence_lower=numeric(), confidence_higher=numeric())
+
+baltimore_test=
+  prop.test(baltimore_df$total_unsolved, baltimore_df$total_homicide)|>
+  broom::tidy()
+
+output_df= bind_rows(output_df,data.frame(
+                        proportion = baltimore_test$estimate,
+                        confidence_lower = baltimore_test$conf.low,
+                        confidence_higher = baltimore_test$conf.high))
+```
+
+```{r}
+prop_test_full = function(total_unsolved, total_homicide) {
+  test_result = prop.test(total_unsolved, total_homicide)
+  test_result_tidy = broom::tidy(test_result)
+  
+  return(test_result_tidy)
+}
+
+output_df_full = summary |>
+  mutate(test_result=
+           purrr::map2(total_unsolved, total_homicide, prop_test_full)) |>
+  unnest(test_result) |>
+  select(city_state, estimate, conf.low, conf.high) 
+```
+Warning checked, seems to be the result of small sample sizes in certain cities (i.e. Tulsa, AL)
+
+```{r}
+output_df_full|>
+  ggplot(aes(x=reorder(city_state, estimate), y = estimate)) +
+  geom_point(color = "blue")+
+  geom_errorbar(aes(ymin=conf.low, ymax=conf.high))+
+  coord_flip() +
+  labs(
+    title = "Proportion of Unsolved Homicides by City",
+    x = "City",
+    y = "Proportion of Unsolved Homicides",
+    caption = "95% Confidence Interval indicated by error bars"
+  ) +
+  theme(
+    axis.text.y = element_text(size = 7))
 ```
 
