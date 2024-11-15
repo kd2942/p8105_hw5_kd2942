@@ -59,7 +59,7 @@ output = output|>
       mean(conclusion == "Reject"))
     
   
-output |> 
+power_plot = output |> 
   ggplot(aes(y=power, x= mu)) +
   geom_point() +
   geom_path()
@@ -68,10 +68,17 @@ output |>
 **Describe the association between effect size and power**
 
 ```{r}
-output |>
-  ggplot(aes(y=mu_hat, x=mu)) + 
-  geom_path()
+output_gg =output |>
+  mutate(
+    avg_mu_hat = mean(mu_hat))
 
+output_gg|>
+  ggplot(aes(y=avg_mu_hat, x=mu)) + 
+  geom_point() + 
+  geom_path()
+```
+
+```{r}
 
 ```
 
