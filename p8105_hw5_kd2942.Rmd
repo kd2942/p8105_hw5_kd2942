@@ -4,17 +4,31 @@ author: "Kaylin De Silva"
 date: 11-15-2024
 output: github_document
 ---
-**Problem 2**
-#loading libraries and fixing output
-```{r}
+```{r load libraries}
 library(tidyverse)
 library(dplyr)
 library(rvest)
 set.seed(1)
 ```
-This chunk loads the tidyverse and dplyr libraries. 
+This chunk loads the tidyverse, rvest, and dplyr libraries and fixes the output. 
 
-```{r}
+**Problem 1**
+```{r creating birthday function}
+sim_birthday = function(n) {
+  birthdays = sample(1:365, n, replace = TRUE)
+  duplicated = length(birthdays) != length(unique(birthdays))
+  
+  return(duplicated)
+}
+
+result = sim_birthday(50)
+print(result)
+```
+Did not get to fully complete problem #1.
+
+**Problem 2**
+```{r creating dataset and performing t-tests}
+#setting up the function
 datasets = function(n = 30, mu = 0, sigma = 5) {
   
   sim_data = tibble(
@@ -23,8 +37,10 @@ datasets = function(n = 30, mu = 0, sigma = 5) {
   return(sim_data)
 }
 
+#defining output 
 output = data.frame(mu=numeric(), mu_hat=numeric(),p_value=numeric())
 
+#setting up a sequence to iterate over and a for loop body that applies the datasets function for each sequence element, performs a ttest, and saves the result
 for (mu in 0:6) {
   for (i in 1:5000) {
     sim_data=
@@ -39,11 +55,14 @@ for (mu in 0:6) {
     }
 }
 
+#viewing the head of the output to ensure that the values are reasonable
 head(output)
 ```
+This chunk fixes the population n and sd and generates 5000 datasets that are normally distributed for each population mean (means ranging from 0-6).The sample mean and p-value from a t-test were obtained and saved for each dataset.
 
+```{r power vs true mean plot}
+#creating a variable that indicates whether the null hypothesis of the t-test was rejected or not, and then creating a variable for power by getting the proportion of rejected tests after grouping them by true mean 
 
-```{r}
 output = output|>
   mutate(
     conclusion = ifelse(
@@ -52,7 +71,8 @@ output = output|>
         mutate(
     power = 
       mean(conclusion == "Reject"))
-    
+
+#creating a plot to show the proportion of times the null was rejected on the y axis and the true mean on the x axis   
 output|> 
   ggplot(aes(y=power, x=mu)) +
   geom_point() +
@@ -64,18 +84,22 @@ output|>
   )
 ```
 
-**Describe the association between effect size and power**
+This chunk plots the power of the ttest versus the true population mean. The plot indicates that the test power increases as the true population mean value increases. This makes sense given that a larger effect size is associated with a higher statistical power. As the null hypothesis is testing that the mean is equal to 0, the power of the test increases as the true mean gets further from 0 (effect size increases).
 
-```{r}
+```{r true value of mean against avg estimate of mean}
+
+#creating a variable for average estimate of mean
 output_gg =output |>
   mutate(
     avg_mu_hat = mean(mu_hat)) 
 
+#creating a data frame that only shows data for samples for which the null was rejected
 output_gg_reject = output |> 
   filter(conclusion=="Reject") |>
    mutate(
      avg_mu_hat = mean(mu_hat))
 
+#plotting the average estimate of the sample mean against the true value of the mean 
 output_gg_plot = output_gg|>
   ggplot(aes(y=avg_mu_hat, x=mu)) + 
   geom_point() + 
@@ -84,6 +108,7 @@ output_gg_plot = output_gg|>
     x = "True Value of μ",
     y = "Average Estimate of Sample Mean")
 
+#overlaying the above plot with a plot of the average estimate of the mean only in samples for which the null was rejected on the y axis and the true mean on the x axis
 output_gg_total  =
   output_gg_plot +
   geom_point(data = output_gg_reject, aes(y=avg_mu_hat, x=mu)) +
@@ -96,23 +121,27 @@ output_gg_total  =
 
 print(output_gg_total)
 ```
+This chunk plots the average estimate of the mean (in all samples and only in samples where the null was rejected) against the true mean value. 
 
-**Not equal where null was less likely to be rejected**
+The sample average of the mean across tests for which the null is rejected is not approximately equal to the true value of the mean for true mean values 0-3. This is because these are true mean values where the null was less likely to be rejected (compared to the true mean of 6). As the true mean gets greater (i.e. effect size increases), the sample average gets closer to the true value across tests for which the null is rejected. 
 
 **Problem 3**
-```{r}
+```{r loading dataset}
+#loading csv
 raw_washington_df = read.csv(file = "./homicide-data.csv")
 
+#viewing variables
 head(raw_washington_df)
 ```
 The data set has 52,179 observations and 12 columns. 
-
-```{r}
+```{r obtaining summary for total homicides and unsolved homicides}
+#creating a city_state variable
 washington_df = raw_washington_df |>
   mutate(
     city_state = paste(city, state, sep=", ")
   )
 
+#summarizing total homicides and total unsolved homicides by grouping by city_state and creating a variable for unsolved homicides using the disposition variable
 summary = washington_df |>
   group_by(city_state)|>
   mutate(
@@ -120,27 +149,39 @@ summary = washington_df |>
   summarize(
     total_homicide = n(),
     total_unsolved= sum(unsolved == "TRUE"))
-    
+
+#viewing results   
 print(summary)  
 ```
+This chunk summarizes within cities to obtain the total number of homicides and the number of unsolved homicides. 
 
-```{r}
+```{r proportion of unsolved homicides and CI }
+#isolating Baltimore to run prop.test function
 baltimore_df = summary |>
   filter(city_state == "Baltimore, MD") 
 
+#defining output
 output_df = data.frame(proportion=numeric(), confidence_lower=numeric(), confidence_higher=numeric())
 
+#running prop.test
 baltimore_test=
   prop.test(baltimore_df$total_unsolved, baltimore_df$total_homicide)|>
   broom::tidy()
 
+#saving output
 output_df= bind_rows(output_df,data.frame(
                         proportion = baltimore_test$estimate,
                         confidence_lower = baltimore_test$conf.low,
                         confidence_higher = baltimore_test$conf.high))
-```
 
-```{r}
+#viewing results 
+print(output_df)
+```
+The proportion of unsolved homicides in Baltimore was 0.6456 (95% CI: 0.6276, 0.6632).
+
+```{r running prop.test for each city}
+
+#setting up function
 prop_test_full = function(total_unsolved, total_homicide) {
   test_result = prop.test(total_unsolved, total_homicide)
   test_result_tidy = broom::tidy(test_result)
@@ -148,15 +189,17 @@ prop_test_full = function(total_unsolved, total_homicide) {
   return(test_result_tidy)
 }
 
+#using the map2 function to apply the prop.test to each city_state
 output_df_full = summary |>
   mutate(test_result=
            purrr::map2(total_unsolved, total_homicide, prop_test_full)) |>
   unnest(test_result) |>
   select(city_state, estimate, conf.low, conf.high) 
 ```
-Warning checked, seems to be the result of small sample sizes in certain cities (i.e. Tulsa, AL)
+This chunk runs the prop.test for each of the cities in the data set and extracts both the proportion of unsolved homicides and the confidence interval for each. The warning was checked and seems to be the result of small sample sizes in certain cities (i.e. Tulsa, AL).
 
-```{r}
+```{r plot for estimates and CIs for each city}
+#creating plot for estimates and CIs for each city using geom_errorbar for the CIs 
 output_df_full|>
   ggplot(aes(x=reorder(city_state, estimate), y = estimate)) +
   geom_point(color = "blue")+
@@ -171,4 +214,4 @@ output_df_full|>
   theme(
     axis.text.y = element_text(size = 7))
 ```
-
+This chunk creates a plot for estimates and CIs for each city and organizes cities according to the proportion of unsolved homicides.
